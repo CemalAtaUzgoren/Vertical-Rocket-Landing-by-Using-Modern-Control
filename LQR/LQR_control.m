@@ -1,0 +1,116 @@
+clc; 
+close all;
+
+%% Constant parameters of the rocket
+l=70;%meter
+g=9.81;%gravity
+m=505.806;%mass of the rocket as kg
+j=(m*(l^2))/12;%inertia kgm^2
+u1_avg=100000/2;%side motors thrust force as kg
+u2_avg=154674.99817/2;%average thrust force as kg
+
+%% state space matrix
+A=[0 1 0 0 0 0;
+   0 0 0 0 -u2_avg/m 0;
+   0 0 0 1 0 0;
+   0 0 0 0 u1_avg/m 0;
+   0 0 0 0 0 1;
+   0 0 0 0 0 0];
+%% control matrix
+B=[0 0;
+   1/m 0;
+   0 0;
+   0 ((u2_avg-g)*m)/(u2_avg-(g*m));
+   0 0;
+   l/(2*j) 0];
+%% Q and R matrices
+weight=diag([1000 5 1 2 1000 1]);
+P=0.0001;
+
+[K, S, Eigen_values]=lqr(A,B,weight,P);%calculating K values with LQR
+%% simulation
+simulation_time=30;
+x0=[1000;
+    200;
+    2000;
+    400;
+    -80;
+    2];
+open_system("lqr_controller_simulation_for_rocket_landing.slx")
+sim("lqr_controller_simulation_for_rocket_landing.slx")
+
+%% extracting the data from the simulation
+
+%extraction_out       extraction_cont
+%-------------        ---------------
+%column1=x            column1=u1
+%column2=x dot        column2=u2
+%column3=y
+%column4=y dot
+%column5=theta
+%column6=theta dot
+
+sim_time=out.simout.time;
+
+extraction_out=zeros(length(out.simout.signals.values(:,1)),length(A));
+extraction_cont=zeros(length(out.simcont.signals.values(:,1)),size(B,2));
+for i=1:1:6
+    extraction_out(:,i)=out.simout.signals.values(:,i);
+    if i<3
+      extraction_cont(:,i)=out.simcont.signals.values(:,i);
+    end
+end
+
+%% ploting datas
+figure
+legends=["x" 'x dot' 'y' 'y dot' 'theta' 'theta dot'];
+for j=1:1:length(A)
+    subplot(3,2,j)
+    plot(sim_time,extraction_out(:,j),'LineWidth',2,'Color','r')
+    legend(legends(j))
+    grid on
+end
+
+
+%% Animation(rocket behavior)
+figure
+for k=1:1:length(sim_time )
+    
+     %existing the ground
+     [x ,y] = meshgrid(-3000:1000:3000); % Generate x and y data
+     z = zeros(size(x, 1)); % Generate z data
+     surf(x, y, z,'FaceColor','#000000') % Plot the surfacehold on
+     alpha(.6)
+     hold on
+     %ploting the aimed point
+     for i=100:200:600
+     viscircles([0 0],i)
+     end
+     
+     %import roket stl as geometry 
+     gm = importGeometry("Rocket.stl");
+     
+     scale(gm,500)
+     rotate(gm,extraction_out(k,5)*(-1),[0 0 0],[0 1 0]);
+     translate(gm,([extraction_out(k,1) 0 extraction_out(k,3)]))
+     %ploting the stl with its current position
+     pdegplot(gm)
+     
+     xlim([-3000 3000])
+     ylim([-3000 3000])
+     zlim([0 3000])
+     view(3)
+     title(['ALTİTUDE=',num2str(extraction_out(k,3)) ,'   LONGİTUDE=',num2str(extraction_out(k,1)) ,'   ANGLE=',num2str(extraction_out(k,5))])
+     xlabel('X(m)')
+     ylabel('Y(m)')
+     zlabel('Z(m)')
+     grid on
+     
+    pause(0.1)
+    hold off
+end
+
+
+
+
+
